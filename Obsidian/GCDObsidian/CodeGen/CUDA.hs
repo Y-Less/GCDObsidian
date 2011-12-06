@@ -28,8 +28,8 @@ gc = genConfig "" ""
 
 syncLine = line "__syncthreads();"
 
-tidLine = line "unsigned int tid = threadIdx.x;"
-bidLine = line "unsigned int bid = blockIdx.x;" 
+tidLine = line "unsigned int tidx = threadIdx.x;"
+bidLine = line "unsigned int bidx = blockIdx.x;" 
 
 
 sBase size = if size > 0 
@@ -169,7 +169,7 @@ genProg mm nt (Assign name ix a) =
         
         
 genProg mm nt (ForAll f n) = potentialCond gc mm n nt $ 
-                               genProg mm nt (f (variable "tid"))
+                               genProg mm nt (f (variable "tidx"))
   -- TODO: Many details missing here, think about nested ForAlls 
   -- TODO: Sync only if needed here                              
   --      ++ Might help to add information to Program type that a "sync is requested"                              

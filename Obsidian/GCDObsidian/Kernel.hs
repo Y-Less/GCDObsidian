@@ -21,11 +21,16 @@ import Obsidian.GCDObsidian.Program
 ------------------------------------------------------------------------------  
 -- threadId, here or elsewhere ?
 
-tid :: Exp Word32
-tid = variable "tid"
-      
+-- Could be good (IMHO) to rename this to "tIdX" just so "tIdY" doesn't look
+-- like it says "tidy".
+tidx :: Exp Word32
+tidx = variable "tidx"
+
+tidy :: Exp Word32
+tidy = variable "tidy"
+
 type NumThreads = Word32      
-      
+
 
 ------------------------------------------------------------------------------
 -- Kernels

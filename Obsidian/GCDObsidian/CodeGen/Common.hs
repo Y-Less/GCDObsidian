@@ -90,38 +90,69 @@ genIf         [b,e1,e2] = b ++ " ? " ++ e1 ++ " : " ++ e2
 ------------------------------------------------------------------------------
 -- genOp
 genOp :: Op a -> [String] -> String
-genOp Add     [a,b] = oper "+" a b 
-genOp Sub     [a,b] = oper "-" a b 
-genOp Mul     [a,b] = oper "*" a b 
-genOp Div     [a,b] = oper "/" a b 
+genOp Add = oper "+"
+genOp Sub = oper "-"
+genOp Mul = oper "*"
+genOp Div = oper "/"
 
-genOp Mod     [a,b] = oper "%" a b 
+genOp Mod = oper "%"
 
-genOp Sin     [a]   = func "sin" a 
-genOp Cos     [a]   = func "cos" a 
+genOp Sin = func "sin" 
+genOp Cos = func "cos"
 -- Bool ops
-genOp Eq      [a,b] = oper "==" a b 
-genOp Lt      [a,b] = oper "<" a b 
-genOp LEq     [a,b] = oper "<=" a b 
-genOp Gt      [a,b] = oper ">" a b
-genOp GEq     [a,b] = oper ">=" a b
+genOp Eq  = oper "=="
+genOp Lt  = oper "<"
+genOp LEq = oper "<="
+genOp Gt  = oper ">"
+genOp GEq = oper ">="
 
 -- Bitwise ops
-genOp BitwiseAnd [a,b] = oper "&" a b 
-genOp BitwiseOr  [a,b] = oper "|" a b 
-genOp BitwiseXor [a,b] = oper "^" a b 
-genOp BitwiseNeg [a]   = unOp "~" a 
-genOp ShiftL     [a,b] = oper "<<" a b 
-genOp ShiftR     [a,b] = oper ">>" a b 
+genOp BitwiseAnd = oper "&"
+genOp BitwiseOr  = oper "|"
+genOp BitwiseXor = oper "^"
+genOp BitwiseNeg = unOp "~"
+genOp ShiftL     = oper "<<"
+genOp ShiftR     = oper ">>"
 
 
 -- built-ins 
-genOp Min      [a,b] = func "min" (a ++ "," ++ b) 
-genOp Max      [a,b] = func "max" (a ++ "," ++ b) 
+genOp Min = func "min"
+genOp Max = func "max"
 
-func  f a = f ++ "(" ++ a ++ ")" 
-oper  f a b = "(" ++ a ++ f ++ b ++ ")" 
-unOp  f a   = "(" ++ f ++ a ++ ")"
+-- Floating (different CUDA functions for float and double, issue maybe?)
+genOp Exp   = func "expf"
+genOp Sqrt  = func "sqrtf"
+genOp Log   = func "logf"
+genOp Log2  = func "log2f"
+genOp Log10 = func "log10f"
+genOp Pow   = func "powf"
+genOp Tan   = func "tanf"
+genOp ASin  = func "asinf"
+genOp ATan  = func "atanf"
+genOp ACos  = func "acosf"
+genOp SinH  = func "sinhf"
+genOp TanH  = func "tanhf"
+genOp CosH  = func "coshf"
+genOp ASinH = func "asinhf"
+genOp ATanH = func "atanhf"
+genOp ACosH = func "atanhf"
+genOp FDiv  = oper "/"
+
+--func  f a = f ++ "(" ++ a ++ ")" 
+--oper  f a b = "(" ++ a ++ f ++ b ++ ")" 
+--unOp  f a   = "(" ++ f ++ a ++ ")"
+
+-- Updated to take any number of function parameters ("min" and "max" already
+-- had custom code for them, and the addition of "pow" with almost identical
+-- code meant it made sense to improve.
+--func f ps = f ++ "(" ++ foldl ((++) . (++ ",")) "" ps ++ ")"
+func f ps = f ++ "(" ++ concat (intersperse "," ps) ++ ")"
+
+oper f [a, b] = "(" ++ a ++ f ++ b ++ ")" 
+oper _ _      = error "Invalid arguments passed to \"oper\""
+
+unOp  f [a]   = "(" ++ f ++ a ++ ")"
+unOp  _ _     = error "Invalid arguments passed to \"unOp\""
 
 
 ------------------------------------------------------------------------------
@@ -194,7 +225,7 @@ end =  unindent >> newline >> line "}" >> newline
 potentialCond gc mm n nt pp 
   | n < nt = 
     do
-      cond gc mm (tid <* (fromIntegral n))
+      cond gc mm (tidx <* (fromIntegral n))
       begin
       pp       
       end 

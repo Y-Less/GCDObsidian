@@ -28,15 +28,15 @@ import Control.Monad.State
 import Data.Word
 ------------------------------------------------------------------------------
 -- Block index ! 
-bid :: Exp Word32
-bid = variable "bid" 
+bidx :: Exp Word32
+bidx = variable "bidx" 
 
 
 cTypeOfArray :: Scalar a =>  Array (Exp a) -> Type 
 cTypeOfArray arr = Pointer (typeOf (arr ! variable "X"))
 
 globalTarget :: Scalar a => Name -> Exp Word32 -> (Exp Word32, Exp a) -> Program ()
-globalTarget n blockSize (i,a) = Assign n ((bid * blockSize) + i)  a 
+globalTarget n blockSize (i,a) = Assign n ((bidx * blockSize) + i)  a 
 
 class BasePush a where 
   cType :: ArrayP (Exp a) -> Type 
@@ -83,7 +83,7 @@ instance Scalar a => InOut (Array (Exp a)) where
   createInputs arr  = do 
     name <- newInOut "input" (cTypeOfArray arr) (len arr)
     let n = fromIntegral (len arr) 
-    return$ Array (\ix -> index name (bid * n + ix))  (len arr)
+    return$ Array (\ix -> index name (bidx * n + ix))  (len arr)
     
   writeOutputs threadBudget arr {-e-} = do   
     
@@ -103,7 +103,7 @@ instance Scalar a => InOut (Array (Exp a)) where
              sp = tbInN * tb
              (a1,a2) = splitAt sp arr
              
-             -- Change to push' for (tid*2,tid*2+1) scheme 
+             -- Change to push' for (tidx*2,tidx*2+1) scheme 
              -- Fix this so that the switch is easier. 
              pa1     = push'' tbInN a1
              pa2     = push a2
@@ -124,7 +124,7 @@ instance (BasePush a, Scalar a) => InOut (ArrayP (Exp a)) where
   createInputs arr  = do 
     name <- newInOut "input" (cType arr) (len arr)
     let n = fromIntegral (len arr) 
-    return$ push$ Array (\ix -> index name (bid * n + ix))  (len arr)
+    return$ push$ Array (\ix -> index name (bidx * n + ix))  (len arr)
     
   writeOutputs threadBudget parr {-e-} = do   
     

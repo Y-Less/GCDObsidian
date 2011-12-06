@@ -132,7 +132,7 @@ mapMemoryProgram (Allocate name size t _) m mm = (m',mm')
   where 
     (m'',addr) = allocate m size
     -- TODO: maybe create Global arrays if Local memory is full.
-    -- t = Pointer$ Local$ typeOf$ getLLArray (head ws) `llIndex`  tid
+    -- t = Pointer$ Local$ typeOf$ getLLArray (head ws) `llIndex`  tidx
     (m',mm') = 
       case Map.lookup name mm of 
         Nothing      -> (m'',Map.insert name (addr,t) mm)
@@ -151,7 +151,7 @@ mapMemoryProgram (Allocate name size t program) m mm = mapMemoryProgram program 
   where 
     (m'',addr) = allocate m size
     -- TODO: maybe create Global arrays if Local memory is full.
-    -- t = Pointer$ Local$ typeOf$ getLLArray (head ws) `llIndex`  tid
+    -- t = Pointer$ Local$ typeOf$ getLLArray (head ws) `llIndex`  tidx
     (m',mm') = 
       case Map.lookup name mm of 
         Nothing      -> (m'',Map.insert name (addr,t) mm)

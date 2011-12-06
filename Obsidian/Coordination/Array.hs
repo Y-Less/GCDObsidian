@@ -65,24 +65,35 @@ import Prelude hiding (zipWith)
 import Control.Monad.State
 import Control.Monad.Writer
 
-bid :: Exp Word32
-bid = variable "bid"
+bidx :: Exp Word32
+bidx = variable "bidx"
+
 bwd :: Exp Word32
 bwd = variable "blockDim.x"
+
 gwd :: Exp Word32
 gwd = variable "gridDim.x" 
 
+bidy :: Exp Word32
+bidy = variable "bidy"
+
+bhi :: Exp Word32
+bhi = variable "blockDim.y"
+
+ghi :: Exp Word32
+ghi = variable "gridDim.y" 
+
 standardInput :: Array (Exp Int)
-standardInput = Array (\tix-> index "input" ((bid*bwd)+tix)) 256
+standardInput = Array (\tix-> index "input" ((bidx*bwd)+tix)) 256
 
 revblocks :: Array a -> Array a 
-revblocks (Array ixf n) = Array (\tix -> ixf (((gwd - bid - 1)*(fromIntegral n)) + tix)) n
+revblocks (Array ixf n) = Array (\tix -> ixf (((gwd - bidx - 1)*(fromIntegral n)) + tix)) n
 
 stdIn :: Word32 -> Exp Word32 -> Exp Word32 
-stdIn n tix  = (bid*(fromIntegral n)) + tix 
+stdIn n tix  = (bidx*(fromIntegral n)) + tix 
 
 stdOut :: Word32 -> Exp Word32 -> Exp Word32
-stdOut n tix = (bid *(fromIntegral n)) + tix
+stdOut n tix = (bidx *(fromIntegral n)) + tix
 
 ----------------------------------------------------------------------------
 -- 
@@ -268,7 +279,7 @@ test arr = let arr' = Input arr
 launchUn :: (Scalar a, Scalar b) 
             => Int                  
             -> Int                  
-            -> (Exp Word32 -> Exp Word32)  -- Maybe should be something else ? (bid tid etc ?) 
+            -> (Exp Word32 -> Exp Word32)  -- Maybe should be something else ? (bidx tidx etc ?) 
             -> (Array (Exp a) -> Kernel (Array (Exp b))) 
             -> (Exp Word32 -> Exp Word32)  
             -> KC (GlobalArray (Exp a)) 

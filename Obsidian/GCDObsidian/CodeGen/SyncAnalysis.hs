@@ -36,7 +36,7 @@ import qualified Data.Map as Map
    TEMap is a Index to ThreadId  that for every index remembers what 
       thread computed it. 
 
-   So when computing location tid in an array, every array and index 
+   So when computing location tidx in an array, every array and index 
    that that location depends on is found. The array-names are used 
    to make lookups into SAMap followed by looking up the in the TEMap 
    using the index. If the thread obtained is in another warp a sync 
@@ -110,7 +110,7 @@ syncAnalysis prg = snd$ syncAnalysis' prg Map.empty
                                  -- error$ show arrloc -- (sam',prg) 
       where                                   
         threads   = [0..(n-1)]
-        gPrgs     = [(g (fromIntegral tid),tid) | tid <- threads] 
+        gPrgs     = [(g (fromIntegral tidx),tidx) | tidx <- threads] 
     
         arrloc''   = concatMap getSourceIndices gPrgs  
         arrloc'    = filter pred arrloc''
@@ -129,9 +129,9 @@ syncAnalysis prg = snd$ syncAnalysis' prg Map.empty
 -}
 -- TODO: look at the special case below. (Make more beautiful) 
 getSourceIndices :: (Program a,Word32) -> [(Word32,(Name,Exp Word32))] 
-getSourceIndices (Assign nom (Literal ix) a,tid) = map (\y -> (tid,y)) (collectArrayIndexPairs a)
+getSourceIndices (Assign nom (Literal ix) a,tidx) = map (\y -> (tidx,y)) (collectArrayIndexPairs a)
 -- Special case! 
-getSourceIndices (Assign nom ix _,tid) = 
+getSourceIndices (Assign nom ix _,tidx) = 
   if isPrefixOf "result" nom || 
      isPrefixOf "input" nom then [] 
   else error$ "getSourceIndices: " ++ show ix ++ " is not Literal"
@@ -139,7 +139,7 @@ getSourceIndices _ = error "getSourceIndices: Can only handle a very simple case
 
 -- What array are we computing now, 
 -- create the threadId -> Ix map for that array 
-getTargIndex ((Assign nom (Literal ix) a),tid) = (nom,(ix,tid))--(nom,(ix,tid)) 
+getTargIndex ((Assign nom (Literal ix) a),tidx) = (nom,(ix,tidx))--(nom,(ix,tidx)) 
 
 -- What characterizes a conflict  
 conflict :: [(Word32,(Name,Word32))] -> SAMap -> (SAMap,Bool)

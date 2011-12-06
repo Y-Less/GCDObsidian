@@ -142,7 +142,28 @@ data Op a where
   -- built-ins
   Min        :: Ord a => Op ((a,a) -> a) 
   Max        :: Ord a => Op ((a,a) -> a) 
-
+  
+  -- Floating (different CUDA functions for float and double, issue maybe?)
+  Exp :: Floating a => Op (a -> a) -- "expf"
+  Sqrt :: Floating a => Op (a -> a) -- "sqrtf"
+  --RSqrt :: Floating a => Op (a -> a) -- "rsqrtf"
+  Log :: Floating a => Op (a -> a) -- "logf"
+  Log2 :: Floating a => Op (a -> a) -- "log2f"
+  Log10 :: Floating a => Op (a -> a) -- "log10f"
+  Pow :: Floating a => Op ((a, a) -> a) -- "powf"
+  -- Floating Trig
+  Tan :: Floating a => Op (a -> a) -- "tanf"
+  ASin :: Floating a => Op (a -> a) -- "asinf"
+  ATan :: Floating a => Op (a -> a) -- "atanf"
+  ACos :: Floating a => Op (a -> a) -- "acosf"
+  SinH :: Floating a => Op (a -> a) -- "sinhf"
+  TanH :: Floating a => Op (a -> a) -- "tanhf"
+  CosH :: Floating a => Op (a -> a) -- "coshf"
+  ASinH :: Floating a => Op (a -> a) -- "asinhf"
+  ATanH :: Floating a => Op (a -> a) -- "atanhf"
+  ACosH :: Floating a => Op (a -> a) -- "acoshf"
+  -- There is no "div" in "Num" but it's already defined above.
+  FDiv :: Floating a => Op ((a, a) -> a) -- "acoshf"
 
 ------------------------------------------------------------------------------
 -- helpers 
@@ -215,6 +236,9 @@ instance Num (Exp Int) where
   
   (*) a (Literal 1) = a 
   (*) (Literal 1) a = a
+  (*) _ (Literal 0) = Literal 0 
+  (*) (Literal 0) _ = Literal 0
+  (*) (Literal a) (Literal b) = Literal (a * b)
   (*) a b = BinOp Mul a b 
   
   signum = undefined 
@@ -291,7 +315,77 @@ instance Integral (Exp Word32) where
   div a b = BinOp Div a b
   quotRem = undefined
   toInteger = undefined
+
+--------------------------------------------------------------------------------
+-- FLOAT Instances
+
+instance Num (Exp Float) where 
+  (+) a (Literal 0) = a
+  (+) (Literal 0) a = a
+  (+) (Literal a) (Literal b) = Literal (a + b)
+  (+) a b = BinOp Add a b  
   
+  (-) a (Literal 0) = a 
+  (-) (Literal a) (Literal b) = Literal (a - b) 
+  (-) a b = BinOp Sub a b 
+  
+  (*) a (Literal 1) = a 
+  (*) (Literal 1) a = a
+  (*) _ (Literal 0) = Literal 0 
+  (*) (Literal 0) _ = Literal 0
+  (*) (Literal a) (Literal b) = Literal (a * b)
+  (*) a b = BinOp Mul a b 
+  
+  signum = undefined 
+  abs = undefined
+  fromInteger a = Literal (fromInteger a) 
+
+instance Fractional (Exp Float) where
+  (/) a b = BinOp FDiv a b
+  recip a = (Literal 1) / a
+  fromRational a = Literal (fromRational a)
+
+instance Floating (Exp Float) where
+  pi = Literal pi
+  exp a = UnOp Exp a
+  sqrt a = UnOp Sqrt a
+  log a = UnOp Log a
+  (**) a b = BinOp Pow a b
+  
+  -- log_b(x) = log_e(x) / log_e(b)
+  logBase (Literal 2) b = UnOp Log2 b
+  logBase (Literal 10) b  = UnOp Log10 b
+  logBase a b = (UnOp Log b) / (UnOp Log a)
+  
+  sin (Literal 0) = Literal 0
+  sin a = UnOp Sin a
+  tan (Literal 0) = Literal 0
+  tan a = UnOp Tan a
+  cos (Literal 0) = Literal 1
+  cos a = UnOp Cos a
+  
+  asin (Literal 0) = Literal 0
+  asin a = UnOp ASin a
+  atan (Literal 0) = Literal 0
+  atan a = UnOp ATan a
+  acos (Literal 1) = Literal 0
+  acos a = UnOp ACos a
+  
+  sinh (Literal 0) = Literal 0
+  sinh a = UnOp Sin a
+  tanh (Literal 0) = Literal 0
+  tanh a = UnOp Tan a
+  cosh (Literal 0) = Literal 1
+  cosh a = UnOp Cos a
+  
+  asinh a = UnOp ASinH a
+  atanh a = UnOp ATanH a
+  acosh a = UnOp ACosH a
+  
+  -- Don't second guess the CUDA compiler (or, more accurately, assume that
+  -- other compilers have this).
+  --(/) (Literal 1) (UnOp Sqrt b) = UnOp RSqrt b -- Optimisation.
+
 ----------------------------------------------------------------------------
   
 (==*) (Literal a) (Literal b) = Literal (a == b) 
@@ -361,3 +455,25 @@ printOp BitwiseOr  = " | "
 printOp BitwiseXor = " ^ " 
 printOp BitwiseNeg = " ~ "  
 
+printOp Exp   = " Exp "
+printOp Sqrt  = " Sqrt "
+printOp Log   = " Log "
+printOp Log2  = " Log2 "
+printOp Log10 = " Log10 "
+printOp Pow   = " ** " -- Or just "Pow", but this is like the Haskell version.
+printOp Tan   = " Tan "
+printOp ASin  = " ASin "
+printOp ATan  = " ATan "
+printOp ACos  = " ACos "
+printOp SinH  = " SinH "
+printOp TanH  = " TanH "
+printOp CosH  = " CosH "
+printOp ASinH = " ASinH "
+printOp ATanH = " ATanH "
+printOp ACosH = " ACosH "
+printOp FDiv  = " / "
+
+printOp Mod = " % "
+printOp Div = " / "
+printOp ShiftL = " << "
+printOp ShiftR = " >> "

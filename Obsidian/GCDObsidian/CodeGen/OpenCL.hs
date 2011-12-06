@@ -30,11 +30,11 @@ gc = genConfig "__global" "__local"
 
 syncLine = line "barrier(CLK_LOCAL_MEM_FENCE);"
 
-tidLine = line "unsigned int tid = get_local_id(0);"
+tidLine = line "unsigned int tidx = get_local_id(0);"
 
--- To get something that corresponds to bid in OpenCL 
+-- To get something that corresponds to bidx in OpenCL 
 -- you need the "blocksize" 
-bidLine = line "unsigned int bid = (get_global_id(0)-tid) / get_local_size(0);" 
+bidLine = line "unsigned int bidx = (get_global_id(0)-tidx) / get_local_size(0);" 
 
 -- Here the shared memory size is needed (I think) 
 -- Note:  You can set the size here (in the kernel) or 
@@ -83,7 +83,7 @@ genProg mm nt (Assign name ix a) =
           concat (genExp gc mm a) ++ ";"
         newline
 genProg mm nt (ForAll f n) =  potentialCond gc mm n nt $ 
-                               genProg mm nt (f (variable "tid"))
+                               genProg mm nt (f (variable "tidx"))
 genProg mm nt (Allocate name size t _) = return ()
 genProg mm nt Skip = return ()
 genProg mm nt (Synchronize _) = syncLine >> newline

@@ -49,7 +49,7 @@ free_sBase size =
   else return ()
 
 forEach ::  GenConfig -> MemMap -> Exp Word32 -> PP () -> PP ()
-forEach gc mm e pp = line ("for (uint32_t tid = 0; tid < " ++ concat (genExp gc mm e) ++"; ++tid)") >>
+forEach gc mm e pp = line ("for (uint32_t tidx = 0; tidx < " ++ concat (genExp gc mm e) ++"; ++tidx)") >>
                      begin >>
                      pp >> 
                      end 
@@ -104,7 +104,7 @@ genProg mm nt (Assign name ix a) =
         newline
 -- A bit ugly.         
 genProg mm nt (ForAll f n) = 
-  forEach gc mm (fromIntegral n) (genProg mm nt (f (variable "tid")))
+  forEach gc mm (fromIntegral n) (genProg mm nt (f (variable "tidx")))
 genProg mm nt (Allocate name size t _) = return () 
 genProg mm nt Skip = return ()
 genProg mm nt (Synchronize _) = return ()
@@ -155,6 +155,6 @@ genKernel name kernel a = seqc
     seqc = getC (config threadBudget mm (size m)) 
                 c' 
                 name 
-                (("bid",Word32):(map fst2 ins)) 
+                (("bidx",Word32):(map fst2 ins)) 
                 (map fst2 outs)
     
