@@ -30,11 +30,11 @@ gc = genConfig "__global" "__local"
 
 syncLine = line "barrier(CLK_LOCAL_MEM_FENCE);"
 
-tidLine = line "unsigned int tidx = get_local_id(0);"
+tidxLine = line "unsigned int tidx = get_local_id(0);"
 
 -- To get something that corresponds to bidx in OpenCL 
 -- you need the "blocksize" 
-bidLine = line "unsigned int bidx = (get_global_id(0)-tidx) / get_local_size(0);" 
+bidxLine = line "unsigned int bidx = (get_global_id(0)-tidx) / get_local_size(0);" 
 
 -- Here the shared memory size is needed (I think) 
 -- Note:  You can set the size here (in the kernel) or 
@@ -56,8 +56,8 @@ getOpenCL :: Config -> Program a -> Name -> [(String,Type)] -> [(String,Type)] -
 getOpenCL conf c name ins outs = 
   runPP (kernelHead name ins outs >>  
          begin >>
-         tidLine >> newline >>
-         bidLine >> newline >>
+         tidxLine >> newline >>
+         bidxLine >> newline >>
          sBase (configLocalMem conf) >> newline >> 
          genOpenCLBody conf c >>
          end ) 0 

@@ -108,6 +108,13 @@ data Exp a where
              -> Exp a 
              -> Exp b 
   
+  CastOp  :: (Scalar a,
+              Scalar b)
+             => Type
+             -> Type
+             -> Exp b
+             -> Exp a
+  
 ----------------------------------------------------------------------------
 -- Operations
 

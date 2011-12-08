@@ -59,7 +59,7 @@ genExp gc mm exp@(Index (name,es)) =
   where 
     (offs,t)  = 
       case Map.lookup name mm of  
-        Nothing -> error "array does not excist in map" 
+        Nothing -> error "array does not exist in map" 
         (Just x) -> x
     name' = if mappedName name 
             then parens$ genCast gc t ++ 
@@ -68,13 +68,16 @@ genExp gc mm exp@(Index (name,es)) =
                  else "sbase"
             else name
 
-   
+
 genExp gc mm (BinOp op e1 e2) = 
   [genOp op (genExp gc mm e1 ++ genExp gc mm e2)]
 
 genExp gc mm (UnOp op e) = 
   [genOp op (genExp gc mm e)] 
-  
+
+genExp gc mm (CastOp frm to e) = 
+  [parens $ genCast undefined to ++ (head $ genExp gc mm e)] 
+
 genExp gc mm (If b e1 e2) =   
   [genIf (genExp gc mm b ++ 
           genExp gc mm e1 ++ 
@@ -85,8 +88,11 @@ genIndices gc mm es = concatMap (pIndex mm) es
   where 
     pIndex mm e = "[" ++ concat (genExp gc mm e) ++ "]"
 
+------------------------------------------------------------------------------
+--genCast _ to e = "(" ++ show to ++ ")(" ++ e ++ ")"
+------------------------------------------------------------------------------
 
-genIf         [b,e1,e2] = b ++ " ? " ++ e1 ++ " : " ++ e2
+genIf         [b,e1,e2] = "(" ++ b ++ " ? " ++ e1 ++ " : " ++ e2 ++ ")"
 ------------------------------------------------------------------------------
 -- genOp
 genOp :: Op a -> [String] -> String

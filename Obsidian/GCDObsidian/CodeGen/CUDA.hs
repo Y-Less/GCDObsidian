@@ -28,8 +28,11 @@ gc = genConfig "" ""
 
 syncLine = line "__syncthreads();"
 
-tidLine = line "unsigned int tidx = threadIdx.x;"
-bidLine = line "unsigned int bidx = blockIdx.x;" 
+tidxLine = line "unsigned int tidx = threadIdx.x;"
+bidxLine = line "unsigned int bidx = blockIdx.x;" 
+
+tidyLine = line "unsigned int tidy = threadIdx.y;"
+bidyLine = line "unsigned int bidy = blockIdx.y;" 
 
 
 sBase size = if size > 0 
@@ -132,8 +135,10 @@ getCUDA :: Config
 getCUDA conf c name ins outs = 
   runPP (kernelHead name ins outs >>  
          begin >>
-         tidLine >> newline >>
-         bidLine >> newline >>
+         tidxLine >> newline >>
+         bidxLine >> newline >>
+         tidyLine >> newline >>
+         bidyLine >> newline >>
          sBase (configLocalMem conf) >> newline >> 
          genCUDABody conf c >>
          end ) 0 

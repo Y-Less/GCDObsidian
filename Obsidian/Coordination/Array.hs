@@ -77,11 +77,11 @@ gwd = variable "gridDim.x"
 bidy :: Exp Word32
 bidy = variable "bidy"
 
-bhi :: Exp Word32
-bhi = variable "blockDim.y"
+bhd :: Exp Word32
+bhd = variable "blockDim.y"
 
-ghi :: Exp Word32
-ghi = variable "gridDim.y" 
+ghd :: Exp Word32
+ghd = variable "gridDim.y" 
 
 standardInput :: Array (Exp Int)
 standardInput = Array (\tix-> index "input" ((bidx*bwd)+tix)) 256
