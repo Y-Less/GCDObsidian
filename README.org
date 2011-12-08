@@ -4,38 +4,23 @@
   + Generates CUDA/OpenCL kernels
   + Generates Sequential C code for testing purposes
     
-* News in GCDObsidian 
+* News and current status
+  + OpenCL and C code generation is currently broken!!
+    This is because of addition of new intermediate representation and 
+    common subexpression elimination experiments. Been working on 
+    getting the CUDA part to work first. 
+  + Global Arrays
+    Experimenting with a new kind of Kernel. These kernels 
+    have types like: GlobalArray Pull (Exp a) -> Kernel (GlobalArray Push (Exp a))
+    This also lets the Obsidian programmer express some aspects of what we 
+    usually refer to as Kernel coordination. 
+    Two functions (block and unblock) chop global arrays up into small arrays suitable 
+    for processing by what we have so far called a Kernel.
+    There are some restrictions (maybe totally necessary): There is no way to, 
+    within a kernel, go from (GlobalArray Push a) to (GlobalArray Pull a).  
+    
   + Push Arrays: Explanation to come
-
-  + (BROKEN!!!) SyncAnalysis: Trying to automatically decide when to insert 
-    a CUDA __syncthreads(); call. Previously everytime the programmer 
-    did a sync it resulted in a CUDA __syncthreads() in the generated 
-    CUDA code. 
-  
-  + Kernel Building blocks: 
-    There are pure functions, (Array a -> Array a), that can be composed
-    using Haskell functional composition. These are turned into "kernels" using the function pure.
     
-    
-* Work in progress
-  + More library functions needed
-  + Library of Pushy array functions needed too.
-    Should provide a lot of room for experimentation.
-    
-* Latest changes
-  + Trying to add the idea of Push arrays to Obsidian. 
-  + What used to be (Array Int) is now (Array (Exp Int) or 
-    (Array (Data Int)), whichever is preferable. 
-    This means the Array datatype changed from 
-    data Array a = Array (Exp Word32 -> Exp a) Word32 
-    to 
-    data Array a = Array (Exp Word32 -> a) Word32 
-    
-  + LLArrays have been removed along with many hundreds 
-    of lines of code that needs to be completely rewritten. 
-    The push array takes the role of the old LLArray in this version. 
-
-
 * Notes
   + (Solved, it works, see below)
     OpenCL: The kind of pointer arithmetic + casting, that has worked so well 
@@ -49,13 +34,15 @@
   + Obsidian Int are "64"bit on 64bit architectures. Is it also true that 
     a CUDA int is 64bit on 64bit architectures?
 
-* TODO:
+* TODO and to look into:
+  + Improve upon the things in Sync.hs 
+    Syncing needs to be improved. (work on more kinds of arrays, needs type class magic)
   + Fix SyncAnalysis
-  + Perform CSE
-  + Kernel Coordination layer
-  + Generate the vSwap/iSwap kind of kernels. That is Kernels that operate 
-       on an array based on its global tid instead of local tid.
-  +  Generate Kernels that take scalar parameters
-  + Syncing needs to be improved. (work on more kinds of arrays, needs type class magic)
+  + IN PROGRESS: Perform CSE
+  + IN PROGRESS: Kernel Coordination layer
+  + DONE: Generate the vSwap/iSwap kind of kernels. That is Kernels that operate 
+          on an array based on its global tid instead of local tid.
+  + DONE: Generate Kernels that take scalar parameters
   + Push arrays and parallelism 
   + Filters and unsafe operations that lead to nondeterminism
+  + 2D and 3D Arrays. Add in some form.  

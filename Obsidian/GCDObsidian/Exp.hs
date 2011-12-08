@@ -5,7 +5,11 @@
              FlexibleInstances, 
              UndecidableInstances #-} 
 
-module Obsidian.GCDObsidian.Exp where 
+module Obsidian.GCDObsidian.Exp 
+       (module Obsidian.GCDObsidian.Exp,
+        module Obsidian.GCDObsidian.DimSpec) where 
+
+
 
 import Data.List
 import Data.Word 
@@ -13,10 +17,14 @@ import Data.Bits
 
 import qualified Foreign.Storable as Storable
 
+import Obsidian.GCDObsidian.DimSpec
+
 ------------------------------------------------------------------------------
 -- Obsidian imports
 import Obsidian.GCDObsidian.Types
 import Obsidian.GCDObsidian.Globs
+
+import Obsidian.GCDObsidian.CodeGen.SPMDC
 
 ------------------------------------------------------------------------------
 -- some synonyms
@@ -30,10 +38,10 @@ type UByteE  = Exp Word8
 type UShortE = Exp Word16 
 type UWordE  = Exp Word32 
 type ULongE  = Exp Word64 
-
 ------------------------------------------------------------------------------
--- Class Scalar. (Things that are not tuples) 
-class Show a => Scalar a where 
+-- Class Scalar. All the things we can handle code generation for 
+
+class (ExpToCExp a, Show a) => Scalar a where 
   sizeOf :: Exp a -> Int   --  
   typeOf :: Exp a -> Type  --   Good enough for me ... 
 
@@ -77,13 +85,34 @@ instance Scalar Word64 where
   sizeOf _ = 8 
   typeOf _ = Word64
 
+
 ----------------------------------------------------------------------------
 -- Expressions 
 data Exp a where
   Literal :: Scalar a 
              => a 
              -> Exp a 
+  
+  {- 
+  Add more specific constructors for block,thread variables
+   (these concepts excist in both OpenCL and CUDA 
+    but are accessed differently so it could be a good 
+    idea to add them as constructors here. These 
+    can be translated into the CUDA/OpenCL specific 
+    concept later in the codegeneration 
+  -} 
+  BlockIdx :: DimSpec 
+              -> Exp Word32
+  ThreadIdx :: DimSpec
+               -> Exp Word32
+  
+  BlockDim :: DimSpec       -- useful ?? 
+              -> Exp Word32  
 
+  GridDim  :: DimSpec 
+              -> Exp Word32
+  
+  
   Index   :: Scalar a => 
              (Name,[Exp Word32]) 
              -> Exp a 
@@ -107,6 +136,8 @@ data Exp a where
              => Op (a -> b)            
              -> Exp a 
              -> Exp b 
+             
+
   
   CastOp  :: (Scalar a,
               Scalar b)
@@ -201,20 +232,6 @@ collectArrayIndexPairs (UnOp  _ e) = collectArrayIndexPairs e
 collectArrayIndexPairs (If b e1 e2) = collectArrayIndexPairs b ++ 
                                       collectArrayIndexPairs e1 ++ 
                                       collectArrayIndexPairs e2
-
-
-
-
---collectArrays (Tuple t) = collectArraysTup t 
---collectArrays (Prj t e) = collectArraysPrj t e 
-
---collectArraysTup :: forall t. Tuple.Tuple Exp t -> [String]
---collectArraysTup Nil = []
---collectArraysTup (a :. t) = collectArrays a ++ (collectArraysTup t) 
-  
---collectArraysPrj = undefined 
-
-
 
 ------------------------------------------------------------------------------
 -- 
@@ -433,9 +450,6 @@ printExp (Index (name,es)) =
 printExp (BinOp op e1 e2) = "(" ++ printOp op ++ " " ++  printExp e1 ++ " " ++ printExp e2 ++ " )"
 printExp (UnOp  op e) = "(" ++ printOp op ++ " " ++ printExp e ++ " )"
 printExp (If b e1 e2) = "(" ++ printExp b ++ " ? " ++ printExp e1 ++ " : " ++ printExp e2 ++ ")"
---printExp (Op op e) = "(" ++ printOp op  ++ printExp e ++ ")"
---printExp (Tuple t) = printTup t
---printExp (Prj i t) = printPrj i t
 
 
 printOp :: Op a -> String
@@ -484,3 +498,93 @@ printOp Mod = " % "
 printOp Div = " / "
 printOp ShiftL = " << "
 printOp ShiftR = " >> "
+
+
+---------------------------------------------------------------------------- 
+-- Experimenting 
+
+class ExpToCExp a where 
+  expToCExp :: Exp a -> CExpr 
+
+
+instance  ExpToCExp Bool where 
+  expToCExp (Literal True) = cLiteral (IntVal 1) CInt 
+  expToCExp (Literal False) = cLiteral (IntVal 0) CInt
+  expToCExp a = expToCExpGeneral a 
+
+instance ExpToCExp Int where 
+  expToCExp (Literal a) = cLiteral (IntVal a) CInt
+  expToCExp a = expToCExpGeneral a  
+
+instance ExpToCExp Float where 
+  expToCExp (Literal a) = cLiteral (FloatVal a) CFloat
+  expToCExp a = expToCExpGeneral a 
+
+instance ExpToCExp Double where 
+  expToCExp (Literal a) = cLiteral (DoubleVal a) CDouble
+  expToCExp a = expToCExpGeneral a 
+
+instance ExpToCExp Word8 where 
+  expToCExp (Literal a) = cLiteral (Word8Val a) CWord8
+  expToCExp a = expToCExpGeneral a 
+
+instance ExpToCExp Word16 where 
+  expToCExp (Literal a) = cLiteral (Word16Val a) CWord16
+  expToCExp a = expToCExpGeneral a 
+
+instance ExpToCExp Word32 where 
+  expToCExp (Literal a) = cLiteral (Word32Val a) CWord32
+  expToCExp a = expToCExpGeneral a 
+
+instance ExpToCExp Word64 where 
+  expToCExp (Literal a) = cLiteral (Word64Val a) CWord64
+  expToCExp a = expToCExpGeneral a 
+
+  
+expToCExpGeneral :: ExpToCExp a  => Exp a -> CExpr 
+expToCExpGeneral (BlockIdx d) = cBlockIdx d
+expToCExpGeneral (ThreadIdx d) = cThreadIdx d
+expToCExpGeneral (BlockDim d) = cBlockDim d
+expToCExpGeneral (GridDim d)  = cGridDim d
+
+expToCExpGeneral e@(Index (name,[])) = cVar name (typeToCType (typeOf e))
+expToCExpGeneral e@(Index (name,xs)) = cIndex (cVar name (CPointer (typeToCType (typeOf e))),map expToCExp xs) (typeToCType (typeOf e)) 
+expToCExpGeneral e@(If b e1 e2)      = cCond  (expToCExp b) (expToCExp e1) (expToCExp e2) (typeToCType (typeOf e)) 
+expToCExpGeneral e@(BinOp Min e1 e2) = cFuncExpr "min" [expToCExp e1, expToCExp e2] (typeToCType (typeOf e)) 
+expToCExpGeneral e@(BinOp Max e1 e2) = cFuncExpr "max" [expToCExp e1, expToCExp e2] (typeToCType (typeOf e)) 
+expToCExpGeneral e@(BinOp op e1 e2)  = cBinOp (binOpToCBinOp op) (expToCExp e1) (expToCExp e2) (typeToCType (typeOf e)) 
+expToCExpGeneral (UnOp  Sin e)     = cFuncExpr "sin" [expToCExp e] CFloat
+expToCExpGeneral (UnOp  Cos e)     = cFuncExpr "cos" [expToCExp e] CFloat
+expToCExpGeneral e@(UnOp  op e1)     = cUnOp  (unOpToCUnOp op) (expToCExp e1) (typeToCType (typeOf e)) 
+
+typeToCType Bool = CInt 
+typeToCType Int  = CInt
+typeToCType Float = CFloat
+typeToCType Double = CDouble
+typeToCType Word8 = CWord8
+typeToCType Word16 = CWord16
+typeToCType Word32 = CWord32
+typeToCType Word64 = CWord64
+typeToCType (Pointer t) = CPointer (typeToCType t)
+typeToCType (Global t)  = CQualified CQualifyerGlobal (typeToCType t) 
+typeToCType (Local t)  = CQualified CQualifyerLocal (typeToCType t) 
+
+-- maybe unnecessary
+binOpToCBinOp Add = CAdd
+binOpToCBinOp Sub = CSub
+binOpToCBinOp Mul = CMul
+binOpToCBinOp Div = CDiv 
+binOpToCBinOp Mod = CMod
+binOpToCBinOp Eq  = CEq 
+binOpToCBinOp Lt  = CLt 
+binOpToCBinOp LEq = CLEq
+binOpToCBinOp Gt  = CGt 
+binOpToCBinOp GEq = CGEq 
+binOpToCBinOp BitwiseAnd = CBitwiseAnd
+binOpToCBinOp BitwiseOr  = CBitwiseOr
+binOpToCBinOp BitwiseXor = CBitwiseXor
+binOpToCBinOp ShiftL     = CShiftL 
+binOpToCBinOp ShiftR     = CShiftR
+-- notice min and max is not here ! 
+
+unOpToCUnOp   BitwiseNeg = CBitwiseNeg

@@ -1,6 +1,9 @@
 
 module Obsidian.GCDObsidian.CodeGen.CUDA 
-       (genKernel,genKernel_) where 
+       (genKernel
+       ,genKernel_ 
+       ,genKernelGlob
+       ,genKernelGlob_ ) where 
 
 import Data.List
 import Data.Word 
@@ -15,12 +18,15 @@ import Obsidian.GCDObsidian.Exp
 import Obsidian.GCDObsidian.Types
 import Obsidian.GCDObsidian.Globs
 import Obsidian.GCDObsidian.Program
+
+import Obsidian.GCDObsidian.CodeGen.PP
 import Obsidian.GCDObsidian.CodeGen.Common
 import Obsidian.GCDObsidian.CodeGen.InOut 
-
 import Obsidian.GCDObsidian.CodeGen.SyncAnalysis
 import Obsidian.GCDObsidian.CodeGen.Memory
 import Obsidian.GCDObsidian.CodeGen.Liveness
+
+import Obsidian.GCDObsidian.CodeGen.SPMDC
 
 ----------------------------------------------------------------------------
 -- 
@@ -105,7 +111,7 @@ genKernel name kernel a = cuda
     lc  = liveness c
     
     
-    
+
    
     threadBudget =  
       case c of 
@@ -122,6 +128,75 @@ genKernel name kernel a = cuda
     cuda = getCUDA (config threadBudget mm (size m)) c' name (map fst2 ins) (map fst2 outs)
 
 
+genKernelGlob :: (GlobalInput a, GlobalOutput b)
+                 => String 
+                 -> (a -> Kernel b) 
+                 -> a 
+                 -> String
+genKernelGlob name kernel a = cuda 
+  where 
+    (input,ins) = runInOut_ (createGlobalInput a)                             
+    ((res,_),c_old) = runKernel (kernel input) 
+    
+    -- TODO: *ERROR* will only work if there 
+    --       is atleast one sync in the kernel. 
+    --  + Maybe not an error. This kind of globalKernel 
+    --    must push at some point since only push arrays are 
+    --    acceptable global outputs
+    threadBudget = threadsNeeded c 
+    
+    lc = liveness c_old 
+    
+    (m,mm) = mapMemory lc sharedMem Map.empty
+    (outcode,outs) = 
+      runInOut_ (writeGlobalOutput threadBudget res) 
+      
+    c = c_old *>* outcode
+     
+    cuda = getCUDA (config threadBudget mm (size m)) 
+                   c  
+                   name
+                   (map fst2 ins) 
+                   (map fst2 outs)
+ 
+
+
+genKernelGlob_ :: (GlobalInput a, GlobalOutput b)
+                 => String 
+                 -> (a -> Kernel b) 
+                 -> a 
+                 -> String
+genKernelGlob_ name kernel a = cuda 
+  where 
+    (input,ins) = runInOut_ (createGlobalInput a)                             
+    ((res,_),c_old) = runKernel (kernel input) 
+    
+    -- TODO: *ERROR* will only work if there 
+    --       is atleast one sync in the kernel. 
+    --       (This kind of kernel always will have) 
+    threadBudget = threadsNeeded c 
+    
+    lc = liveness c_old 
+    
+    (m,mm) = mapMemory lc sharedMem Map.empty
+    (outcode,outs) = 
+      runInOut_ (writeGlobalOutput threadBudget res) 
+      
+    c = c_old *>* outcode
+    
+
+    swap (x,y) = (y,x)
+    inputs = map ((\(t,n) -> (typeToCType t,n)) . swap . fst2) ins
+    outputs = map ((\(t,n) -> (typeToCType t,n)) . swap . fst2) outs 
+    --tidDecl = cDeclAssign CWord32 "tid" (cVar "threadIdx.x" CWord32) 
+    --bidDecl = cDeclAssign CWord32 "bid" (cVar "blockIdx.x" CWord32) 
+    
+    spmd = performCSE2 (progToSPMDC threadBudget c)
+    body = {- tidDecl:bidDecl: -} (mmSPMDC mm spmd)
+    ckernel = CKernel CQualifyerKernel CVoid name (inputs++outputs) body
+    cuda = printCKernel (PPConfig "__global__" "" "" "__syncthreads()") ckernel 
+  
+
 ------------------------------------------------------------------------------
 -- put together all the parts that make a CUDA kernel.     
 getCUDA :: Config 
@@ -134,11 +209,9 @@ getCUDA :: Config
            
 getCUDA conf c name ins outs = 
   runPP (kernelHead name ins outs >>  
-         begin >>
-         tidxLine >> newline >>
-         bidxLine >> newline >>
-         tidyLine >> newline >>
-         bidyLine >> newline >>
+         begin >> newline >> 
+         -- tidLine >> newline >>
+         -- bidLine >> newline >>
          sBase (configLocalMem conf) >> newline >> 
          genCUDABody conf c >>
          end ) 0 
@@ -174,7 +247,11 @@ genProg mm nt (Assign name ix a) =
         
         
 genProg mm nt (ForAll f n) = potentialCond gc mm n nt $ 
-                               genProg mm nt (f (variable "tidx"))
+                               genProg mm nt (f (ThreadIdx X) {- (variable "tid") -} )
+-- Investigate why this line is not used. 
+genProg mm nt (ForAllGlobal f n) = error "hello world"                                
+--genProg mm nt (f (variable "gtid"))
+  
   -- TODO: Many details missing here, think about nested ForAlls 
   -- TODO: Sync only if needed here                              
   --      ++ Might help to add information to Program type that a "sync is requested"                              
@@ -188,3 +265,64 @@ genProg mm nt (ProgramSeq p1 p2) =
     genProg mm nt p1
     genProg mm nt p2
 
+
+
+---------------------------------------------------------------------------- 
+-- genProgSPMDC 
+    
+ctid = cVar "tid" CWord32
+  
+progToSPMDC :: Word32 -> Program a -> [SPMDC] 
+progToSPMDC nt (Assign name ix a) = 
+  [cAssign (cVar name CWord8)[expToCExp ix] (expToCExp a)] 
+progToSPMDC nt (ForAll f n) =         
+  if (n < nt) 
+  then 
+    [cIf (cBinOp CLt ctid (cLiteral (Word32Val n) CWord32) CInt)
+        code []]
+  else 
+    code 
+  where 
+    code = progToSPMDC nt (f (ThreadIdx X) {- (variable "tid") -} )
+    
+progToSPMDC nt (Allocate name size t _) = []
+progToSPMDC nt (Synchronize True) = [CSync] 
+progToSPMDC nt (Synchronize False) = [] 
+progToSPMDC nt Skip = []
+progToSPMDC nt (ProgramSeq p1 p2) = progToSPMDC nt p1 ++ progToSPMDC nt p2
+
+----------------------------------------------------------------------------
+-- Memory map the arrays in an SPMDC
+mmSPMDC :: MemMap -> [SPMDC] -> [SPMDC] 
+mmSPMDC mm [] = [] 
+mmSPMDC mm (x:xs) = mmSPMDC' mm x : mmSPMDC mm xs
+
+mmSPMDC' :: MemMap -> SPMDC -> SPMDC
+mmSPMDC' mm (CAssign e1 es e2) = 
+  cAssign (mmCExpr mm e1) 
+          (map (mmCExpr mm) es)    
+          (mmCExpr mm e2)
+mmSPMDC' mm (CFunc name es) = cFunc name (map (mmCExpr mm) es) 
+mmSPMDC' mm CSync           = CSync
+mmSPMDC' mm (CIf   e s1 s2) = cIf (mmCExpr mm e) (mmSPMDC mm s1) (mmSPMDC mm s2)
+mmSPMDC' mm (CDeclAssign t nom e) = cDeclAssign t nom (mmCExpr mm e)
+----------------------------------------------------------------------------
+-- Memory map the arrays in an CExpr
+mmCExpr mm (CExpr (CVar nom t)) =  
+  case Map.lookup nom mm of 
+    Just (addr,t) -> 
+      let core = cBinOp CAdd (cVar "sbase" CWord8) (cLiteral (Word32Val addr) CWord32)
+          cast c = cCast  (c (typeToCType t)) (typeToCType t)
+      in cast core
+    
+    Nothing -> cVar nom t
+mmCExpr mm (CExpr (CIndex (e1,es) t)) = cIndex (mmCExpr mm e1, map (mmCExpr mm) es) t
+mmCExpr mm (CExpr (CBinOp op e1 e2 t)) = cBinOp op (mmCExpr mm e1) (mmCExpr mm e2) t
+mmCExpr mm (CExpr (CUnOp op e t)) = cUnOp op (mmCExpr mm e) t 
+mmCExpr mm (CExpr (CFuncExpr nom exprs t)) = cFuncExpr nom (map (mmCExpr mm) exprs) t
+mmCExpr mm (CExpr (CCast e t)) = cCast (mmCExpr mm e) t 
+mmCExpr mm a = a 
+          
+  
+----------------------------------------------------------------------------
+-- 

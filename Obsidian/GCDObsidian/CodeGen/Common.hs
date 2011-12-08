@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, GADTs #-}
+{-# LANGUAGE RankNTypes, GADTs  #-}
 
 module Obsidian.GCDObsidian.CodeGen.Common where 
 
@@ -11,9 +11,8 @@ import Obsidian.GCDObsidian.Exp
 import Obsidian.GCDObsidian.Types
 import Obsidian.GCDObsidian.Globs
 
+import Obsidian.GCDObsidian.CodeGen.PP
 import Obsidian.GCDObsidian.CodeGen.Memory
-
-import Control.Monad.State
 
 
 ------------------------------------------------------------------------------
@@ -52,6 +51,22 @@ parens s = '(' : s ++ ")"
 ------------------------------------------------------------------------------
 -- genExp C-style 
 genExp :: Scalar a => GenConfig -> MemMap -> Exp a -> [String]
+
+-- Cheat and do CUDA printing here as well 
+genExp gc _ (BlockIdx X) = ["blockIdx.x"]
+genExp gc _ (BlockIdx Y) = ["blockIdx.y"]
+genExp gc _ (BlockIdx Z) = ["blockIdx.z"]
+genExp gc _ (ThreadIdx X) = ["threadIdx.x"]
+genExp gc _ (ThreadIdx Y) = ["threadIdx.y"]
+genExp gc _ (ThreadIdx Z) = ["threadIdx.z"]
+genExp gc _ (BlockDim X) = ["blockDim.x"]
+genExp gc _ (BlockDim Y) = ["blockDim.y"]
+genExp gc _ (BlockDim Z) = ["blockDim.z"]
+genExp gc _ (GridDim X) = ["gridDim.x"]
+genExp gc _ (GridDim Y) = ["gridDim.y"]
+genExp gc _ (GridDim Z) = ["gridDim.z"]
+
+
 genExp gc _ (Literal a) = [show a] 
 genExp gc _ (Index (name,[])) = [name]
 genExp gc mm exp@(Index (name,es)) = 
@@ -83,7 +98,8 @@ genExp gc mm (If b e1 e2) =
           genExp gc mm e1 ++ 
           genExp gc mm e2 )] 
 
-
+----------------------------------------------------------------------------
+--
 genIndices gc mm es = concatMap (pIndex mm) es  
   where 
     pIndex mm e = "[" ++ concat (genExp gc mm e) ++ "]"
@@ -93,6 +109,7 @@ genIndices gc mm es = concatMap (pIndex mm) es
 ------------------------------------------------------------------------------
 
 genIf         [b,e1,e2] = "(" ++ b ++ " ? " ++ e1 ++ " : " ++ e2 ++ ")"
+
 ------------------------------------------------------------------------------
 -- genOp
 genOp :: Op a -> [String] -> String
@@ -160,49 +177,6 @@ oper _ _      = error "Invalid arguments passed to \"oper\""
 unOp  f [a]   = "(" ++ f ++ a ++ ")"
 unOp  _ _     = error "Invalid arguments passed to \"unOp\""
 
-
-------------------------------------------------------------------------------
--- print and indent and stuff... 
---  This is probably very ugly 
-
--- TODO: There is a chapter about this pretty printing in "implementing functional lang..." 
---       Look at that and learn 
-
-
-type PP a = State (Int,String) a  
-
-indent :: PP ()
-indent = 
-  do 
-    (i,s) <- get 
-    put (i+1,s) 
-    
-unindent :: PP () 
-unindent = 
-  do 
-    (i,s) <- get 
-    if i <= 0 then error "Whats going on" else put (i-1,s) 
-
-line :: String -> PP () 
-line str = 
-  do 
-    (i,s) <- get 
-    put (i,s ++ str) 
-
-  
-
-newline :: PP () 
-newline = 
-  do 
-    (i,s) <- get 
-    let ind = replicate (i*2) ' '
-    put (i,s ++ "\n" ++ ind)
-    
-runPP :: PP a -> Int -> String
-runPP pp i = snd$ execState pp (i,"")
-
-
-
 ------------------------------------------------------------------------------
 -- Configurations, threads,memorymap 
 
@@ -220,11 +194,6 @@ assign gc mm name val = line ((concat (genExp gc mm name)) ++
 cond :: GenConfig -> MemMap -> Exp Bool -> PP ()  
 cond gc mm e = line ("if " ++ concat (genExp gc mm e))  
 
-begin :: PP () 
-begin = line "{" >> indent >> newline
-
-end :: PP () 
-end =  unindent >> newline >> line "}" >> newline
 
 
 -- used in both OpenCL and CUDA generation
