@@ -168,6 +168,7 @@ data Op a where
   LEq :: Ord a => Op ((a,a) -> Bool) 
   Gt  :: Ord a => Op ((a,a) -> Bool) 
   GEq :: Ord a => Op ((a,a) -> Bool) 
+  NEq :: Ord a => Op ((a,a) -> Bool) 
   
   -- Bitwise 
   BitwiseAnd :: Bits a => Op ((a,a) -> a) 
@@ -420,7 +421,10 @@ instance Floating (Exp Float) where
 (<=*) a b = BinOp LEq a b
 (>*)  a b = BinOp Gt  a b
 (>=*) a b = BinOp GEq a b
+(/=*) (Literal a) (Literal b) = Literal (a /= b) 
+(/=*) a b = BinOp NEq a b
 
+infix  4  ==*, <*, <=*, >*, >=*, /=*
 
 class Choice a where 
   ifThenElse :: Exp Bool -> a -> a -> a 
@@ -464,6 +468,7 @@ printOp Lt  = " < "
 printOp LEq = " <= " 
 printOp Gt  = " > "
 printOp GEq = " >= " 
+printOp NEq = " /= " 
 
 printOp Min = " Min "
 printOp Max = " Max " 
@@ -580,6 +585,7 @@ binOpToCBinOp Lt  = CLt
 binOpToCBinOp LEq = CLEq
 binOpToCBinOp Gt  = CGt 
 binOpToCBinOp GEq = CGEq 
+binOpToCBinOp NEq = CNEq 
 binOpToCBinOp BitwiseAnd = CBitwiseAnd
 binOpToCBinOp BitwiseOr  = CBitwiseOr
 binOpToCBinOp BitwiseXor = CBitwiseXor

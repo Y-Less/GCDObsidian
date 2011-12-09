@@ -28,6 +28,8 @@ module Obsidian.GCDObsidian.Array ((!) -- pull array apply (index into)
                                   , mkGlobalPullArray
                                   , Pull(..)
                                   , Push(..)
+                                  , PushArray
+                                  , PullArray
                                   -- , pushGlobal
                                   )where 
 

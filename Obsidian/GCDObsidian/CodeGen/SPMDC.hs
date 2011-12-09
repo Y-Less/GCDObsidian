@@ -59,7 +59,7 @@ data CExprP e  = CVar Name CType
                deriving (Eq,Ord,Show)
                         
 data CBinOp = CAdd | CSub | CMul | CDiv | CMod  
-            | CEq | CLt | CLEq | CGt | CGEq 
+            | CEq | CLt | CLEq | CGt | CGEq | CNEq 
             | CBitwiseAnd | CBitwiseOr | CBitwiseXor 
             | CShiftL | CShiftR 
             deriving (Eq,Ord,Show) 
@@ -180,6 +180,7 @@ ppBinOp CLt  = line$ "<"
 ppBinOp CLEq = line$ "<="
 ppBinOp CGt  = line$ ">" 
 ppBinOp CGEq = line$ ">="
+ppBinOp CNEq = line$ "/="
 ppBinOp CBitwiseAnd = line$ "&"  
 ppBinOp CBitwiseOr  = line$ "|" 
 ppBinOp CBitwiseXor = line$ "^" 
