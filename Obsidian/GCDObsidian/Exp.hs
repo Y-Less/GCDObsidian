@@ -164,11 +164,15 @@ data Op a where
   
   -- Comparisons
   Eq  :: Ord a => Op ((a,a) -> Bool)
+  NotEq :: Ord a => Op ((a,a) -> Bool) 
   Lt  :: Ord a => Op ((a,a) -> Bool) 
   LEq :: Ord a => Op ((a,a) -> Bool) 
   Gt  :: Ord a => Op ((a,a) -> Bool) 
   GEq :: Ord a => Op ((a,a) -> Bool) 
-  NEq :: Ord a => Op ((a,a) -> Bool) 
+  
+  -- Boolean 
+  And :: Op ((Bool,Bool) -> Bool) 
+  Or  :: Op ((Bool,Bool) -> Bool)
   
   -- Bitwise 
   BitwiseAnd :: Bits a => Op ((a,a) -> a) 
@@ -203,6 +207,31 @@ data Op a where
   ACosH :: Floating a => Op (a -> a) -- "acoshf"
   -- There is no "div" in "Num" but it's already defined above.
   FDiv :: Floating a => Op ((a, a) -> a) -- "acoshf"
+
+  -- Floating (different CUDA functions for float and double, issue maybe?) 
+  Exp :: Floating a => Op (a -> a) -- "expf" 
+  Sqrt :: Floating a => Op (a -> a) -- "sqrtf" 
+  --RSqrt :: Floating a => Op (a -> a) -- "rsqrtf"
+  Log :: Floating a => Op (a -> a) -- "logf"
+  Log2 :: Floating a => Op (a -> a) -- "log2f"
+  Log10 :: Floating a => Op (a -> a) -- "log10f"
+  Pow :: Floating a => Op ((a, a) -> a) -- "powf"
+  -- Floating Trig
+  Tan :: Floating a => Op (a -> a) -- "tanf"
+  ASin :: Floating a => Op (a -> a) -- "asinf"
+  ATan :: Floating a => Op (a -> a) -- "atanf"
+  ACos :: Floating a => Op (a -> a) -- "acosf"
+  SinH :: Floating a => Op (a -> a) -- "sinhf"
+  TanH :: Floating a => Op (a -> a) -- "tanhf"
+  CosH :: Floating a => Op (a -> a) -- "coshf"
+  ASinH :: Floating a => Op (a -> a) -- "asinhf" 
+  ATanH :: Floating a => Op (a -> a) -- "atanhf"
+  ACosH :: Floating a => Op (a -> a) -- "acoshf"
+  -- There is no "div" in "Num" but it's already defined above. 
+  FDiv :: Floating a => Op ((a, a) -> a) -- "acoshf"
+
+
+
 
 ------------------------------------------------------------------------------
 -- helpers 
@@ -413,8 +442,11 @@ instance Floating (Exp Float) where
 
 ----------------------------------------------------------------------------
   
+infix 4 ==*, /=*, <*, >*, >=*, <=* 
+  
 (==*) (Literal a) (Literal b) = Literal (a == b) 
 (==*) a b = BinOp Eq a b
+(/=*) a b = BinOp NotEq a b 
 (<*)  (Literal a) (Literal b) = Literal (a < b) 
 (<*)  a b = BinOp Lt a b
 (<=*) (Literal a) (Literal b) = Literal (a <= b) 
@@ -422,9 +454,11 @@ instance Floating (Exp Float) where
 (>*)  a b = BinOp Gt  a b
 (>=*) a b = BinOp GEq a b
 (/=*) (Literal a) (Literal b) = Literal (a /= b) 
-(/=*) a b = BinOp NEq a b
 
-infix  4  ==*, <*, <=*, >*, >=*, /=*
+infixr 3 &&*
+infixr 2 ||* 
+(&&*) a b = BinOp And a b 
+(||*) a b = BinOp Or a b 
 
 class Choice a where 
   ifThenElse :: Exp Bool -> a -> a -> a 
@@ -455,6 +489,18 @@ printExp (BinOp op e1 e2) = "(" ++ printOp op ++ " " ++  printExp e1 ++ " " ++ p
 printExp (UnOp  op e) = "(" ++ printOp op ++ " " ++ printExp e ++ " )"
 printExp (If b e1 e2) = "(" ++ printExp b ++ " ? " ++ printExp e1 ++ " : " ++ printExp e2 ++ ")"
 
+printExp (BlockIdx X) = "blockIdx.x"
+printExp (BlockIdx Y) = "blockIdx.y"
+printExp (BlockIdx Z) = "blockIdx.z"
+printExp (ThreadIdx X) = "threadIdx.x"
+printExp (ThreadIdx Y) = "threadIdx.y"
+printExp (ThreadIdx Z) = "threadIdx.z"
+printExp (BlockDim X) = "blockDim.x"
+printExp (BlockDim Y) = "blockDim.y"
+printExp (BlockDim Z) = "blockDim.z"
+printExp (GridDim X) = "gridDim.x"
+printExp (GridDim Y) = "gridDim.y"
+printExp (GridDim Z) = "gridDim.z"
 
 printOp :: Op a -> String
 printOp Add = " + " 
@@ -464,11 +510,14 @@ printOp Mul = " * "
 -- printOp If  = " if "
 
 printOp Eq  = " == "
+printOp NotEq = " /= " 
 printOp Lt  = " < " 
 printOp LEq = " <= " 
 printOp Gt  = " > "
 printOp GEq = " >= " 
-printOp NEq = " /= " 
+
+printOp And = " && "
+printOp Or  = " || " 
 
 printOp Min = " Min "
 printOp Max = " Max " 
@@ -580,12 +629,17 @@ binOpToCBinOp Sub = CSub
 binOpToCBinOp Mul = CMul
 binOpToCBinOp Div = CDiv 
 binOpToCBinOp Mod = CMod
+
 binOpToCBinOp Eq  = CEq 
+binOpToCBinOp NotEq = CNotEq
 binOpToCBinOp Lt  = CLt 
 binOpToCBinOp LEq = CLEq
 binOpToCBinOp Gt  = CGt 
 binOpToCBinOp GEq = CGEq 
-binOpToCBinOp NEq = CNEq 
+
+binOpToCBinOp And = CAnd 
+binOpToCBinOp Or  = COr 
+
 binOpToCBinOp BitwiseAnd = CBitwiseAnd
 binOpToCBinOp BitwiseOr  = CBitwiseOr
 binOpToCBinOp BitwiseXor = CBitwiseXor
