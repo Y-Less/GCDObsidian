@@ -9,6 +9,7 @@ import qualified Obsidian.GCDObsidian.CodeGen.C as C
 import qualified Obsidian.GCDObsidian.CodeGen.OpenCL as CL
 
 import Obsidian.GCDObsidian.Program
+import qualified Obsidian.GCDObsidian.Helpers as Help
 
 import Data.Word
 import Data.Bits
@@ -26,6 +27,7 @@ input1 :: Array Pull IntE
 input1 = namedArray "apa" 32
 
 getMapFusion   = putStrLn$ CUDA.genKernel "mapFusion" mapFusion input1
+getMapFusion_  = putStrLn$ CUDA.genKernel_ "mapFusion" mapFusion input1
 getMapFusionC  = putStrLn$ C.genKernel "mapFusion" mapFusion input1
 getMapFusionCL = putStrLn$ CL.genKernel "mapFusion" mapFusion input1
 
@@ -36,6 +38,7 @@ mapUnFused :: Array Pull IntE -> Kernel (Array Pull IntE)
 mapUnFused = pure (fmap (*2)) ->- sync ->- pure (fmap (+1))
 
 getMapUnFused = putStrLn$ CUDA.genKernel "mapUnFused" mapUnFused input1
+getMapUnFused_ = putStrLn$ CUDA.genKernel_ "mapUnFused" mapUnFused input1
 
 
 ---------------------------------------------------------------------------
@@ -182,7 +185,7 @@ vSwap' (arr,stride) =
     p2 <- pushGlobal' 512 arr2'
     let p3    = ixMap t1 p1 
     let p4    = ixMap t2 p2 
-    let p5    = GlobalArray (Push (\k -> p3 !* k *>* p4 !* k)) (globLen arr)
+    let p5    = mkGlobalPushArray (\k -> p3 !* k *>* p4 !* k) (globLen arr)
     return p5 
     
   where 
@@ -223,7 +226,107 @@ getvSwap'_ = putStrLn$ CUDA.genKernelGlob_ "vSwap" vSwap' (GlobalArray undefined
 reduceAddBlocks :: GlobalArray Pull (Exp Int) -> Kernel (GlobalArray Push (Exp Int)) 
 reduceAddBlocks  = withBlockSize 64 (reduce (+)) 
 
+
 withBlockSize n p = pure (block n) ->- p ->- pure (unblock . push) 
 
 getR = putStrLn$ CUDA.genKernelGlob "reduce" reduceAddBlocks (GlobalArray undefined (variable "n") :: GlobalArray Pull (Exp Int))     
 getR_ = putStrLn$ CUDA.genKernelGlob_ "reduce" reduceAddBlocks (GlobalArray undefined (variable "n") :: GlobalArray Pull (Exp Int))     
+
+
+
+----------------------------------------------------------------------------
+-- 
+apa :: Array Pull (Exp Int) -> Kernel (Array Push (Exp Int))
+apa = sync  ->- pure push 
+
+
+getApa = putStrLn$ CUDA.genKernel "apa" apa (namedArray "hej" 128 :: Array Pull (Exp Int))
+
+
+----------------------------------------------------------------------------
+-- Preloading examples (Breaks because of poor state of Sync.hs) 
+
+
+
+-- puts two elements per thread in shared memory
+preload2Test :: Array Pull (Exp Int) -> Kernel (Array Pull (Exp Int))
+preload2Test = Help.preload2 
+
+getpreload2Test = putStrLn$ CUDA.genKernel "preload2" preload2Test (namedArray "hej" 128 :: Array Pull (Exp Int))
+
+----------------------------------------------------------------------------
+--
+preload3Test :: Array Pull (Exp Int) -> Kernel (Array Pull (Exp Int))
+preload3Test = Help.preload3 
+
+getpreload3Test = putStrLn$ CUDA.genKernel "preload3" preload3Test (namedArray "hej" (3*100) :: Array Pull (Exp Int))
+
+
+----------------------------------------------------------------------------
+-- I'm not sure why this outputs any code right now. 
+
+preload4Test :: Array Pull (Exp Int) -> Kernel (Array Pull (Exp Int))
+preload4Test = Help.preload4 
+
+getpreload4Test = putStrLn$ CUDA.genKernel "preload4" preload4Test (namedArray "hej" (4*100) :: Array Pull (Exp Int))
+
+----------------------------------------------------------------------------
+-- 
+preload2'Test :: Array Pull (Exp Int) -> Kernel (Array Pull (Exp Int))
+preload2'Test = Help.preload2' 
+
+getpreload2'Test = putStrLn$ CUDA.genKernel "preload2" preload2'Test (namedArray "hej" 128 :: Array Pull (Exp Int))
+
+----------------------------------------------------------------------------
+--
+preload3'Test :: Array Pull (Exp Int) -> Kernel (Array Pull (Exp Int))
+preload3'Test = Help.preload3' 
+
+getpreload3'Test = putStrLn$ CUDA.genKernel "preload3" preload3'Test (namedArray "hej" (3*100) :: Array Pull (Exp Int))
+
+
+----------------------------------------------------------------------------
+-- 
+
+preload4'Test :: Array Pull (Exp Int) -> Kernel (Array Pull (Exp Int))
+preload4'Test = Help.preload4' 
+
+getpreload4'Test = putStrLn$ CUDA.genKernel "preload4" preload4'Test (namedArray "hej" (4*100) :: Array Pull (Exp Int))
+
+
+
+----------------------------------------------------------------------------
+-- GlobalArrays and preloading 
+
+globalPreloadTest :: GlobalArray Pull (Exp Int) -> Kernel (GlobalArray Push (Exp Int)) 
+globalPreloadTest = 
+  -- 128 elements per block. 
+  withBlockSize 128 
+    ( 
+      Help.preload4' ->- 
+      reduceSeqSteps 2 (+) ->- sync ->- 
+      reduce (+) ->- 
+      Help.push1 
+    ) 
+
+reduceSeqSteps :: Int -> (a -> a -> a) -> Array Pull a -> Kernel (Array Pull a)
+reduceSeqSteps 0 op = pure id
+reduceSeqSteps n op = pure (uncurry (zipWith op) . halve) ->- reduceSeqSteps (n-1) op
+
+getGlobalPreload = putStrLn$ CUDA.genKernelGlob "globalPreload" globalPreloadTest (GlobalArray undefined (variable "n") :: GlobalArray Pull (Exp Int))     
+getGlobalPreload_ = putStrLn$ CUDA.genKernelGlob_ "globalPreload" globalPreloadTest (GlobalArray undefined (variable "n") :: GlobalArray Pull (Exp Int))     
+
+----------------------------------------------------------------------------
+-- 
+globalPreloadSimple :: GlobalArray Pull (Exp Int) -> Kernel (GlobalArray Push (Exp Int)) 
+globalPreloadSimple = 
+  -- 128 elements per block. 
+  withBlockSize 128 
+    ( 
+      Help.preload4' ->-   --load 4 elements per thread from GlobArray
+      Help.push4           --push 4 elements per threads
+    ) 
+
+getGlobalPreloadSimple = putStrLn$ CUDA.genKernelGlob "globalPreloadS" globalPreloadSimple (GlobalArray undefined (variable "n") :: GlobalArray Pull (Exp Int))     
+getGlobalPreloadSimple_ = putStrLn$ CUDA.genKernelGlob_ "globalPreloadS" globalPreloadSimple (GlobalArray undefined (variable "n") :: GlobalArray Pull (Exp Int))     
+

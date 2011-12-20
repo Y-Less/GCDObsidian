@@ -28,6 +28,12 @@ import Obsidian.GCDObsidian.CodeGen.Liveness
 
 import Obsidian.GCDObsidian.CodeGen.SPMDC
 
+{- 
+   TODO: 
+    + phase out the old string based codegen 
+
+-} 
+
 ----------------------------------------------------------------------------
 -- 
 gc = genConfig "" ""
@@ -67,6 +73,7 @@ kernelHead name ins outs =
 ------------------------------------------------------------------------------    
 -- CUDA Code from Kernel
   
+{- 
 genKernel_ :: (InOut b) 
               => String 
               -> Kernel b 
@@ -98,7 +105,7 @@ genKernel_ name kernel ins outs = (cuda,threads,size m)
                    outs
 
         
-      
+-}      
     
 genKernel :: (InOut a, InOut b) => String -> (a -> Kernel b) -> a -> String 
 genKernel name kernel a = cuda 
@@ -127,7 +134,46 @@ genKernel name kernel a = cuda
     
     cuda = getCUDA (config threadBudget mm (size m)) c' name (map fst2 ins) (map fst2 outs)
 
+genKernel_ :: (InOut a, InOut b) => String -> (a -> Kernel b) -> a -> String 
+genKernel_ name kernel a = cuda 
+  where 
+    (input,ins)  = runInOut (createInputs a) (0,[])
+  
+    ((res,_),c_old)  = runKernel (kernel input)
+    
+    c = syncAnalysis c_old  
+    lc  = liveness c
+    
+    
+    threadBudget =  
+      case c of 
+        Skip -> gcdThreads res
+        a  -> threadsNeeded c 
+        
+    (m,mm) = mapMemory lc sharedMem  (Map.empty)
+    (outCode,outs)   = 
+      runInOut (writeOutputs threadBudget res {-nosync-}) (0,[])
 
+    c' = c  *>* outCode 
+    
+    swap (x,y) = (y,x)
+    inputs = map ((\(t,n) -> (typeToCType t,n)) . swap . fst2) ins
+    outputs = map ((\(t,n) -> (typeToCType t,n)) . swap . fst2) outs 
+    
+   
+    spmd = performCSE2  (progToSPMDC threadBudget c')
+    body = shared : mmSPMDC mm spmd
+    ckernel = CKernel CQualifyerKernel CVoid name (inputs++outputs) body
+    shared = CDecl (CQualified CQualifyerExtern (CQualified CQualifyerShared ((CQualified (CQualifyerAttrib (CAttribAligned 16)) (CArray []  (CWord8)))))) "sbase"
+    
+    cuda = printCKernel (PPConfig "__global__" "" "" "__syncthreads()") ckernel 
+  
+    
+    -- cuda = getCUDA (config threadBudget mm (size m)) c' name (map fst2 ins) (map fst2 outs)
+
+
+----------------------------------------------------------------------------
+-- Global array kernels
 genKernelGlob :: (GlobalInput a, GlobalOutput b)
                  => String 
                  -> (a -> Kernel b) 
@@ -188,11 +234,9 @@ genKernelGlob_ name kernel a = cuda
     swap (x,y) = (y,x)
     inputs = map ((\(t,n) -> (typeToCType t,n)) . swap . fst2) ins
     outputs = map ((\(t,n) -> (typeToCType t,n)) . swap . fst2) outs 
-    --tidDecl = cDeclAssign CWord32 "tid" (cVar "threadIdx.x" CWord32) 
-    --bidDecl = cDeclAssign CWord32 "bid" (cVar "blockIdx.x" CWord32) 
     
     spmd = performCSE2 (progToSPMDC threadBudget c)
-    body = {- tidDecl:bidDecl: -} (mmSPMDC mm spmd)
+    body =  mmSPMDC mm spmd
     ckernel = CKernel CQualifyerKernel CVoid name (inputs++outputs) body
     cuda = printCKernel (PPConfig "__global__" "" "" "__syncthreads()") ckernel 
   
@@ -292,6 +336,13 @@ progToSPMDC nt Skip = []
 progToSPMDC nt (ProgramSeq p1 p2) = progToSPMDC nt p1 ++ progToSPMDC nt p2
 
 ----------------------------------------------------------------------------
+-- generate a sbase CExpr
+
+sbaseCExpr 0    = cVar "sbase" (CPointer CWord8) 
+sbaseCExpr addr = cBinOp CAdd (cVar "sbase" (CPointer CWord8)) 
+                              (cLiteral (Word32Val addr) CWord32) 
+                              (CPointer CWord8) 
+----------------------------------------------------------------------------
 -- Memory map the arrays in an SPMDC
 mmSPMDC :: MemMap -> [SPMDC] -> [SPMDC] 
 mmSPMDC mm [] = [] 
@@ -311,8 +362,8 @@ mmSPMDC' mm (CDeclAssign t nom e) = cDeclAssign t nom (mmCExpr mm e)
 mmCExpr mm (CExpr (CVar nom t)) =  
   case Map.lookup nom mm of 
     Just (addr,t) -> 
-      let core = cBinOp CAdd (cVar "sbase" CWord8) (cLiteral (Word32Val addr) CWord32)
-          cast c = cCast  (c (typeToCType t)) (typeToCType t)
+      let core = sbaseCExpr addr 
+          cast c = cCast  c (typeToCType t)
       in cast core
     
     Nothing -> cVar nom t

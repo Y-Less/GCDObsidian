@@ -86,6 +86,7 @@ instance Scalar Word64 where
   typeOf _ = Word64
 
 
+
 ----------------------------------------------------------------------------
 -- Expressions 
 data Exp a where
@@ -122,7 +123,7 @@ data Exp a where
              -> Exp a 
              -> Exp a 
              -> Exp a 
-             
+                          
   BinOp   :: (Scalar a,
               Scalar b, 
               Scalar c) 
@@ -185,28 +186,6 @@ data Op a where
   -- built-ins
   Min        :: Ord a => Op ((a,a) -> a) 
   Max        :: Ord a => Op ((a,a) -> a) 
-  
-  -- Floating (different CUDA functions for float and double, issue maybe?)
-  Exp :: Floating a => Op (a -> a) -- "expf"
-  Sqrt :: Floating a => Op (a -> a) -- "sqrtf"
-  --RSqrt :: Floating a => Op (a -> a) -- "rsqrtf"
-  Log :: Floating a => Op (a -> a) -- "logf"
-  Log2 :: Floating a => Op (a -> a) -- "log2f"
-  Log10 :: Floating a => Op (a -> a) -- "log10f"
-  Pow :: Floating a => Op ((a, a) -> a) -- "powf"
-  -- Floating Trig
-  Tan :: Floating a => Op (a -> a) -- "tanf"
-  ASin :: Floating a => Op (a -> a) -- "asinf"
-  ATan :: Floating a => Op (a -> a) -- "atanf"
-  ACos :: Floating a => Op (a -> a) -- "acosf"
-  SinH :: Floating a => Op (a -> a) -- "sinhf"
-  TanH :: Floating a => Op (a -> a) -- "tanhf"
-  CosH :: Floating a => Op (a -> a) -- "coshf"
-  ASinH :: Floating a => Op (a -> a) -- "asinhf"
-  ATanH :: Floating a => Op (a -> a) -- "atanhf"
-  ACosH :: Floating a => Op (a -> a) -- "acoshf"
-  -- There is no "div" in "Num" but it's already defined above.
-  FDiv :: Floating a => Op ((a, a) -> a) -- "acoshf"
 
   -- Floating (different CUDA functions for float and double, issue maybe?) 
   Exp :: Floating a => Op (a -> a) -- "expf" 
@@ -373,26 +352,26 @@ instance Integral (Exp Word32) where
 --------------------------------------------------------------------------------
 -- FLOAT Instances
 
-instance Num (Exp Float) where 
+instance Num (Exp Float) where
   (+) a (Literal 0) = a
   (+) (Literal 0) a = a
   (+) (Literal a) (Literal b) = Literal (a + b)
-  (+) a b = BinOp Add a b  
+  (+) a b = BinOp Add a b
   
-  (-) a (Literal 0) = a 
-  (-) (Literal a) (Literal b) = Literal (a - b) 
-  (-) a b = BinOp Sub a b 
+  (-) a (Literal 0) = a
+  (-) (Literal a) (Literal b) = Literal (a - b)
+  (-) a b = BinOp Sub a b
   
-  (*) a (Literal 1) = a 
+  (*) a (Literal 1) = a
   (*) (Literal 1) a = a
-  (*) _ (Literal 0) = Literal 0 
+  (*) _ (Literal 0) = Literal 0
   (*) (Literal 0) _ = Literal 0
   (*) (Literal a) (Literal b) = Literal (a * b)
-  (*) a b = BinOp Mul a b 
+  (*) a b = BinOp Mul a b
   
-  signum = undefined 
+  signum = undefined
   abs = undefined
-  fromInteger a = Literal (fromInteger a) 
+  fromInteger a = Literal (fromInteger a)
 
 instance Fractional (Exp Float) where
   (/) a b = BinOp FDiv a b
@@ -408,7 +387,7 @@ instance Floating (Exp Float) where
   
   -- log_b(x) = log_e(x) / log_e(b)
   logBase (Literal 2) b = UnOp Log2 b
-  logBase (Literal 10) b  = UnOp Log10 b
+  logBase (Literal 10) b = UnOp Log10 b
   logBase a b = (UnOp Log b) / (UnOp Log a)
   
   sin (Literal 0) = Literal 0
@@ -436,10 +415,14 @@ instance Floating (Exp Float) where
   atanh a = UnOp ATanH a
   acosh a = UnOp ACosH a
   
+  -- Y-Less's comment
   -- Don't second guess the CUDA compiler (or, more accurately, assume that
   -- other compilers have this).
   --(/) (Literal 1) (UnOp Sqrt b) = UnOp RSqrt b -- Optimisation.
 
+  
+  
+  
 ----------------------------------------------------------------------------
   
 infix 4 ==*, /=*, <*, >*, >=*, <=* 
@@ -607,8 +590,27 @@ expToCExpGeneral e@(If b e1 e2)      = cCond  (expToCExp b) (expToCExp e1) (expT
 expToCExpGeneral e@(BinOp Min e1 e2) = cFuncExpr "min" [expToCExp e1, expToCExp e2] (typeToCType (typeOf e)) 
 expToCExpGeneral e@(BinOp Max e1 e2) = cFuncExpr "max" [expToCExp e1, expToCExp e2] (typeToCType (typeOf e)) 
 expToCExpGeneral e@(BinOp op e1 e2)  = cBinOp (binOpToCBinOp op) (expToCExp e1) (expToCExp e2) (typeToCType (typeOf e)) 
-expToCExpGeneral (UnOp  Sin e)     = cFuncExpr "sin" [expToCExp e] CFloat
-expToCExpGeneral (UnOp  Cos e)     = cFuncExpr "cos" [expToCExp e] CFloat
+
+expToCExpGeneral (UnOp Exp e)        = cFuncExpr "exp" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp Sqrt e)       = cFuncExpr "sqrt" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp Log e)        = cFuncExpr "log" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp Log2 e)       = cFuncExpr "log2" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp Log10 e)      = cFuncExpr "log10" [expToCExp e] (typeToCType (typeOf e))
+  
+-- Floating trig
+expToCExpGeneral (UnOp Sin e)        = cFuncExpr "sin" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp Cos e)        = cFuncExpr "cos" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp Tan e)        = cFuncExpr "tan" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp ASin e)       = cFuncExpr "asin" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp ACos e)       = cFuncExpr "acos" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp ATan e)       = cFuncExpr "atan" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp SinH e)       = cFuncExpr "sinh" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp CosH e)       = cFuncExpr "cosh" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp TanH e)       = cFuncExpr "tanh" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp ASinH e)      = cFuncExpr "asinh" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp ACosH e)      = cFuncExpr "acosh" [expToCExp e] (typeToCType (typeOf e))
+expToCExpGeneral (UnOp ATanH e)      = cFuncExpr "atanh" [expToCExp e] (typeToCType (typeOf e))
+ 
 expToCExpGeneral e@(UnOp  op e1)     = cUnOp  (unOpToCUnOp op) (expToCExp e1) (typeToCType (typeOf e)) 
 
 typeToCType Bool = CInt 
@@ -628,6 +630,7 @@ binOpToCBinOp Add = CAdd
 binOpToCBinOp Sub = CSub
 binOpToCBinOp Mul = CMul
 binOpToCBinOp Div = CDiv 
+binOpToCBinOp FDiv = CDiv -- (???)  
 binOpToCBinOp Mod = CMod
 
 binOpToCBinOp Eq  = CEq 
@@ -640,6 +643,8 @@ binOpToCBinOp GEq = CGEq
 binOpToCBinOp And = CAnd 
 binOpToCBinOp Or  = COr 
 
+binOpToCBinOp Pow = CPow
+
 binOpToCBinOp BitwiseAnd = CBitwiseAnd
 binOpToCBinOp BitwiseOr  = CBitwiseOr
 binOpToCBinOp BitwiseXor = CBitwiseXor
@@ -648,3 +653,4 @@ binOpToCBinOp ShiftR     = CShiftR
 -- notice min and max is not here ! 
 
 unOpToCUnOp   BitwiseNeg = CBitwiseNeg
+  
