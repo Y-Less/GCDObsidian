@@ -1,3 +1,0 @@
-a b c d = b * c * d
-x y = y * y
-z = x . a
