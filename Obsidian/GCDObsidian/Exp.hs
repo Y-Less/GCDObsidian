@@ -423,6 +423,77 @@ instance Floating (Exp Float) where
   
   
   
+instance Num (Exp Float) where
+  (+) a (Literal 0) = a
+  (+) (Literal 0) a = a
+  (+) (Literal a) (Literal b) = Literal (a + b)
+  (+) a b = BinOp Add a b
+  
+  (-) a (Literal 0) = a
+  (-) (Literal a) (Literal b) = Literal (a - b)
+  (-) a b = BinOp Sub a b
+  
+  (*) a (Literal 1) = a
+  (*) (Literal 1) a = a
+  (*) _ (Literal 0) = Literal 0
+  (*) (Literal 0) _ = Literal 0
+  (*) (Literal a) (Literal b) = Literal (a * b)
+  (*) a b = BinOp Mul a b
+  
+  signum = undefined
+  abs = undefined
+  fromInteger a = Literal (fromInteger a)
+
+instance Fractional (Exp Float) where
+  (/) a b = BinOp FDiv a b
+  recip a = (Literal 1) / a
+  fromRational a = Literal (fromRational a)
+
+instance Floating (Exp Float) where
+  pi = Literal pi
+  exp a = UnOp Exp a
+  sqrt a = UnOp Sqrt a
+  log a = UnOp Log a
+  (**) a b = BinOp Pow a b
+  
+  -- log_b(x) = log_e(x) / log_e(b)
+  logBase (Literal 2) b = UnOp Log2 b
+  logBase (Literal 10) b = UnOp Log10 b
+  logBase a b = (UnOp Log b) / (UnOp Log a)
+  
+  sin (Literal 0) = Literal 0
+  sin a = UnOp Sin a
+  tan (Literal 0) = Literal 0
+  tan a = UnOp Tan a
+  cos (Literal 0) = Literal 1
+  cos a = UnOp Cos a
+  
+  asin (Literal 0) = Literal 0
+  asin a = UnOp ASin a
+  atan (Literal 0) = Literal 0
+  atan a = UnOp ATan a
+  acos (Literal 1) = Literal 0
+  acos a = UnOp ACos a
+  
+  sinh (Literal 0) = Literal 0
+  sinh a = UnOp Sin a
+  tanh (Literal 0) = Literal 0
+  tanh a = UnOp Tan a
+  cosh (Literal 0) = Literal 1
+  cosh a = UnOp Cos a
+  
+  asinh a = UnOp ASinH a
+  atanh a = UnOp ATanH a
+  acosh a = UnOp ACosH a
+  
+  -- Y-Less's comment
+  -- Don't second guess the CUDA compiler (or, more accurately, assume that
+  -- other compilers have this).
+  --(/) (Literal 1) (UnOp Sqrt b) = UnOp RSqrt b -- Optimisation.
+
+  
+  
+  
 ----------------------------------------------------------------------------
   
 infix 4 ==*, /=*, <*, >*, >=*, <=* 

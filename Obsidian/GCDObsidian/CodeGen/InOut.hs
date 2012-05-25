@@ -28,8 +28,8 @@ import Control.Monad.State
 import Data.Word
 ------------------------------------------------------------------------------
 -- Block index ! 
-bidx :: Exp Word32
-bidx = variable "bidx" 
+bid :: Exp Word32
+bid = variable "blockIdx.x" 
 
 -- should work for any indexible
 cTypeOfArray :: Scalar a =>  Array Pull (Exp a) -> Type 
